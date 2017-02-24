@@ -9,10 +9,10 @@
 ## The Data Structures
 
 * The Skip List
-    *
+    * In progress
 
 * The X-Fast Trie
-    *
+    * In Progress
 
 * The Hash Table
-    *
+    * In progress
