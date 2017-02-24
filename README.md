@@ -16,3 +16,10 @@
 
 * The Hash Table
     * In progress
+
+## Bibliography 
+http://groups.csail.mit.edu/mag/oshman-shavit-podc13.pdf
+http://web.stanford.edu/class/archive/cs/cs166/cs166.1146/lectures/15/Small15.pdf
+https://en.wikipedia.org/wiki/Skip_list
+https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ConcurrentSkipListSet.html
+https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ConcurrentSkipListMap.html
