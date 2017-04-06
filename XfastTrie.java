@@ -7,11 +7,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class XfastTrie {
     private XfastTrieNode root;
-    private DoublyLinkedList<XfastTrieNode> DLL;
+    private ConcurrentDoublyLinkedList<XfastTrieNode> DLL;
 
     public XfastTrie(){
         root = new XfastTrieNode();
-        DLL = new DoublyLinkedList<XfastTrieNode>();
+        DLL = new ConcurrentDoublyLinkedList<XfastTrieNode>();
     }
 
     public void insert(String binaryString){
