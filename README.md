@@ -12,12 +12,13 @@
     * In progress
 
 * The X-Fast Trie
-    * In Progress
+    Our implementation of the x-fast trie is essentially a pseudo-bitwise trie with a doubly linked list built on top of the 
+    leaf row in the trie. Each node has a concurrent hash map of its children.
 
 * The Hash Table
     * In progress
 
-## Bibliography 
+## Bibliography
 http://groups.csail.mit.edu/mag/oshman-shavit-podc13.pdf
 http://web.stanford.edu/class/archive/cs/cs166/cs166.1146/lectures/15/Small15.pdf
 https://en.wikipedia.org/wiki/Skip_list
