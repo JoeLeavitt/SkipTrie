@@ -3,16 +3,19 @@
  */
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class XfastTrie {
     private XfastTrieNode root;
+    private DoublyLinkedList<XfastTrieNode> DLL;
 
     public XfastTrie(){
         root = new XfastTrieNode();
+        DLL = new DoublyLinkedList<XfastTrieNode>();
     }
 
     public void insert(String binaryString){
-        HashMap<Integer, XfastTrieNode> children = root.children;
+        ConcurrentHashMap<Integer, XfastTrieNode> children = root.children;
 
         for(int i = 0; i < binaryString.length(); i++){
             int n = Character.getNumericValue(binaryString.charAt(i));
@@ -32,6 +35,7 @@ public class XfastTrie {
             //set leaf node
             if(i==binaryString.length() - 1){
                 node.isLeaf = true;
+                DLL.add(node);
             }
         }
     }
@@ -51,7 +55,7 @@ public class XfastTrie {
     }
 
     public XfastTrieNode searchNode(String binaryString){
-        Map<Integer, XfastTrieNode> children = root.children;
+        ConcurrentHashMap<Integer, XfastTrieNode> children = root.children;
         XfastTrieNode node = null;
 
         for(int i = 0; i < binaryString.length(); i++){

@@ -3,11 +3,16 @@
  */
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class XfastTrieNode {
     int bits;
-    HashMap<Integer, XfastTrieNode> children = new HashMap<Integer, XfastTrieNode>();
+    ConcurrentHashMap<Integer, XfastTrieNode> children = new ConcurrentHashMap<Integer, XfastTrieNode>();
+
     boolean isLeaf;
+    XfastTrieNode left;
+    XfastTrieNode right;
+    XfastTrieNode back;
 
     public XfastTrieNode() { }
 
