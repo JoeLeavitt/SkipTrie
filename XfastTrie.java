@@ -14,7 +14,8 @@ public class XfastTrie {
         DLL = new ConcurrentDoublyLinkedList<XfastTrieNode>();
     }
 
-    public void insert(String binaryString){
+    public void insert(int base10){
+        String binaryString = Integer.toBinaryString(base10);
         ConcurrentHashMap<Integer, XfastTrieNode> children = root.children;
 
         for(int i = 0; i < binaryString.length(); i++){
@@ -38,6 +39,10 @@ public class XfastTrie {
                 DLL.add(node);
             }
         }
+    }
+
+    public void delete(int base10){
+
     }
 
     // check if bitstring is in trie
