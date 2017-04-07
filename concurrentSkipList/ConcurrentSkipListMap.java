@@ -33,8 +33,10 @@
  * http://creativecommons.org/licenses/publicdomain
  */
 
-package java.util.concurrent;
+package concurrentskip;
+
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 /**
@@ -319,7 +321,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * Comparisons:  c
      */
 
-    private static final long serialVersionUID = -8627078645895051609L;
+     static final long serialVersionUID = -8627078645895051609L;
 
     /**
      * Generates the initial random seed for the cheaper per-instance
@@ -388,6 +390,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
     /* ---------------- Nodes -------------- */
+
+    public static class Pair<X, Y> {
+
+        public final X left;
+        public final Y right;
+
+        public Pair(X left, Y right) {
+        this.left = left;
+        this.right = right;
+        }
+    }
 
     /**
      * Nodes hold keys and values, and are singly linked in sorted
@@ -684,6 +697,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 (fence == null || compare(key, fence) <= 0));
     }
 
+
     /* ---------------- Traversal -------------- */
 
     /**
@@ -694,7 +708,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * @param key the key
      * @return a predecessor of key
      */
-    private Node<K,V> findPredecessor(Comparable<? super K> key) {
+    public Node<K,V> findPredecessor(Comparable<? super K> key) {
         if (key == null)
             throw new NullPointerException(); // don't postpone errors
         for (;;) {
@@ -770,7 +784,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * @param key the key
      * @return node holding key, or null if no such
      */
-    private Node<K,V> findNode(Comparable<? super K> key) {
+    public Node<K,V> findNode(Comparable<? super K> key) {
         for (;;) {
             Node<K,V> b = findPredecessor(key);
             Node<K,V> n = b.next;
@@ -1062,6 +1076,12 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 r = q.right;
             }
         }
+    }
+
+    // Modified by Harold Marcial and Joe Landry
+    // for COP4520 SkipTrie project
+    public boolean add(K k) {
+        return this.putIfAbsent(k, (V)Boolean.TRUE) == null;
     }
 
     /* ---------------- Deletion -------------- */
@@ -2102,6 +2122,60 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return (n == null)? null : n.key;
     }
 
+    public Node<K,V> lowerNode(K key) {
+        Node<K,V> n = findNear(key, LT);
+        return n;
+    }
+
+    // Created by Harold Marcial and Joe Landry
+    // for COP4520 SkipTrie Project
+    public Pair<Node<K,V>, Node<K,V>> listSearch (K kkey , Node<K,V> start){
+
+       int rel = 2;
+
+       Comparable<? super K> key = comparable(start.key);
+        for (;;) {
+//            Node<K,V> b = findPredecessor(kkey);
+
+
+            Node<K,V> b = findPredecessor(key);
+            Node<K,V> n = b.next;
+
+            for (;;) {
+                System.out.println("Here: "+ n.key);
+                if (n == null)
+                    return new Pair<>(b, b.next);
+                    //return ((rel & LT) == 0 || b.isBaseHeader())? null : b;
+                    System.out.println("Here2: "+ n.key);
+                Node<K,V> f = n.next;
+                if (n != b.next)                  // inconsistent read
+                    break;
+                Object v = n.value;
+                if (v == null) {                  // n is deleted
+                    n.helpDelete(b, f);
+                    break;
+                }
+                System.out.println("Here3: "+ n.key);
+                if (v == n || b.value == null)    // b is deleted
+                    break;
+                int c = key.compareTo(kkey);
+                System.out.println("Here4: "+ c + " " + (rel & EQ));
+                if ((c == 0 && (rel & EQ) != 0) ||
+                    (c <  0 && (rel & LT) == 0))
+                    //return n;
+                    return new Pair<>(findPredecessor(comparable(n.key)), n.next);
+                System.out.println("we're here mofos " + b.key);
+                if ( c <= 0 && (rel & LT) != 0)
+                    return new Pair<>(b, b.next);
+                b = n;
+                n = f;
+            }
+        }
+    }
+
+
+
+
     /**
      * Returns a key-value mapping associated with the greatest key
      * less than or equal to the given key, or <tt>null</tt> if there
@@ -2361,6 +2435,8 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             Map.Entry<E,Object> e = m.pollFirstEntry();
             return e == null? null : e.getKey();
         }
+
+
         public E pollLast() {
             Map.Entry<E,Object> e = m.pollLastEntry();
             return e == null? null : e.getKey();
@@ -2413,9 +2489,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         public NavigableSet<E> tailSet(E fromElement) {
             return tailSet(fromElement, true);
         }
-        public NavigableSet<E> descendingSet() {
-            return new ConcurrentSkipListSet(m.descendingMap());
-        }
+         public NavigableSet<E> descendingSet() {
+             return new ConcurrentSkipListSet(m.descendingMap());
+         }
     }
 
     static final class Values<E> extends AbstractCollection<E> {
