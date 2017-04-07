@@ -10,7 +10,7 @@
 
 * The Skip List
     * The skip list used in this project is Doug Lea's implementation of his skip list. We modified his skip list structure by adding list search
-      and the coin fipping, which is needed for the skip trie structure. We also modified the add method.
+      and the coin fipping that is needed for the skip trie structure. We also modified the add method.
 
 * The X-Fast Trie
     * Our implementation of the x-fast trie is essentially a pseudo-bitwise trie with a doubly linked list built on top of the
