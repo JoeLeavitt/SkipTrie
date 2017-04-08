@@ -390,17 +390,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
     /* ---------------- Nodes -------------- */
-
+    
     public static class Pair<X, Y> {
-
-        public final X left;
-        public final Y right;
-
-        public Pair(X left, Y right) {
-        this.left = left;
-        this.right = right;
-        }
-    }
+        
+        public final X left; 
+        public final Y right; 
+        
+        public Pair(X left, Y right) { 
+        this.left = left; 
+        this.right = right; 
+        } 
+    } 
 
     /**
      * Nodes hold keys and values, and are singly linked in sorted
@@ -412,7 +412,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     static final class Node<K,V> {
         final K key;
         volatile Object value;
+        volatile Node<K,V> prev;
         volatile Node<K,V> next;
+        int ready = 0;
 
         /**
          * Creates a new regular node.
@@ -445,6 +447,11 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         static final AtomicReferenceFieldUpdater<Node, Object>
             valueUpdater = AtomicReferenceFieldUpdater.newUpdater
             (Node.class, Object.class, "value");
+        
+        /** Updater for casPrev */
+        static final AtomicReferenceFieldUpdater<Node, Node>
+            prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+            (Node.class, Node.class, "prev");
 
         /**
          * compareAndSet value field
@@ -458,6 +465,13 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
          */
         boolean casNext(Node<K,V> cmp, Node<K,V> val) {
             return nextUpdater.compareAndSet(this, cmp, val);
+        }
+        
+        /**
+         * compareAndSet value field
+         */
+        boolean casPrev(Object cmp, Object val) {
+            return valueUpdater.compareAndSet(this, cmp, val);
         }
 
         /**
@@ -697,7 +711,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 (fence == null || compare(key, fence) <= 0));
     }
 
-
+    
     /* ---------------- Traversal -------------- */
 
     /**
@@ -972,6 +986,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     private void insertIndex(Node<K,V> z, int level) {
         HeadIndex<K,V> h = head;
         int max = h.level;
+        
+        if(level >= max){
+            System.out.println("Adding a top level node");
+        }
 
         if (level <= max) {
             Index<K,V> idx = null;
@@ -1077,9 +1095,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
         }
     }
-
-    // Modified by Harold Marcial and Joe Landry
-    // for COP4520 SkipTrie project
+    
     public boolean add(K k) {
         return this.putIfAbsent(k, (V)Boolean.TRUE) == null;
     }
@@ -2121,60 +2137,74 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         Node<K,V> n = findNear(key, LT);
         return (n == null)? null : n.key;
     }
-
+    
+     /*SkipTrie Helper functions*/
+    
     public Node<K,V> lowerNode(K key) {
         Node<K,V> n = findNear(key, LT);
         return n;
     }
-
-    // Created by Harold Marcial and Joe Landry
-    // for COP4520 SkipTrie Project
-    public Pair<Node<K,V>, Node<K,V>> listSearch (K kkey , Node<K,V> start){
-
-       int rel = 2;
-
-       Comparable<? super K> key = comparable(start.key);
+    
+    
+    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey , Node<K,V> start){
+                
+       Comparable<? super K> key = comparable(kkey);
         for (;;) {
-//            Node<K,V> b = findPredecessor(kkey);
-
-
-            Node<K,V> b = findPredecessor(key);
-            Node<K,V> n = b.next;
-
-            for (;;) {
-                System.out.println("Here: "+ n.key);
-                if (n == null)
-                    return new Pair<>(b, b.next);
-                    //return ((rel & LT) == 0 || b.isBaseHeader())? null : b;
-                    System.out.println("Here2: "+ n.key);
-                Node<K,V> f = n.next;
-                if (n != b.next)                  // inconsistent read
-                    break;
-                Object v = n.value;
-                if (v == null) {                  // n is deleted
-                    n.helpDelete(b, f);
-                    break;
-                }
-                System.out.println("Here3: "+ n.key);
-                if (v == n || b.value == null)    // b is deleted
-                    break;
-                int c = key.compareTo(kkey);
-                System.out.println("Here4: "+ c + " " + (rel & EQ));
-                if ((c == 0 && (rel & EQ) != 0) ||
-                    (c <  0 && (rel & LT) == 0))
-                    //return n;
-                    return new Pair<>(findPredecessor(comparable(n.key)), n.next);
-                System.out.println("we're here mofos " + b.key);
-                if ( c <= 0 && (rel & LT) != 0)
-                    return new Pair<>(b, b.next);
+            
+            Node<K,V> n = start;
+            Node<K,V> b = null;
+                        
+            while(key.compareTo(n.key) > 0 ){
                 b = n;
-                n = f;
+                n = b.next;
+                //System.out.println(key.compareTo(n.key));
+                
             }
+            
+            if((b.value != null) && (b.next.value != null)){
+                if(b.next == n){
+                    //System.out.println(b.key + " " + n.key);
+                    return  new Pair<>(b, n);
+                }
+            }
+            
         }
     }
-
-
-
+    
+    public void fixPrev(Node<K,V> pred, Node<K,V> node){
+        Pair<Node <K,V>, Node <K,V>> pair = listSearch(node.key, pred);
+        Node<K,V> node_prev;
+            
+        while(node.value != null){
+             node_prev = node.prev;
+            if(node.prev.casPrev(node_prev, pair.left)){
+                return;
+            }
+            pair = listSearch(node.key, pred);
+        }
+        node.ready = 1;
+    }
+    
+    public void topLevelDelete(Node<K,V> pred, Node<K,V> node){
+    
+        Pair<Node <K,V>, Node <K,V>> pair;
+        
+        if(node.ready != 1){
+            fixPrev(pred, node);
+        }
+        this.remove(node.key);
+        do{
+            pair = listSearch(node.key, pred);
+            fixPrev(pair.left, pair.right);
+        }while(pair.right != null);
+        
+    }
+    
+    public void topLevelInsert(K key, Node<K,V> pred){
+        this.add(key);
+        
+    }
+    
 
     /**
      * Returns a key-value mapping associated with the greatest key
@@ -2435,8 +2465,8 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             Map.Entry<E,Object> e = m.pollFirstEntry();
             return e == null? null : e.getKey();
         }
-
-
+        
+        
         public E pollLast() {
             Map.Entry<E,Object> e = m.pollLastEntry();
             return e == null? null : e.getKey();
@@ -3218,4 +3248,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
         }
     }
+    
+ 
+    
 }
