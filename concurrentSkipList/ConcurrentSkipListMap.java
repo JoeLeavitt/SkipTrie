@@ -94,7 +94,8 @@ import java.util.concurrent.atomic.*;
 public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     implements ConcurrentNavigableMap<K,V>,
                Cloneable,
-               java.io.Serializable {
+               java.io.Serializable 
+{
     /*
      * This class implements a tree-like two-dimensionally linked skip
      * list in which the index levels are represented in separate
@@ -389,6 +390,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return headUpdater.compareAndSet(this, cmp, val);
     }
 
+	
+	
+	
+	
     /* ---------------- Nodes -------------- */
     
     public static class Pair<X, Y> {
@@ -411,6 +416,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      */
     static final class Node<K,V> {
         final K key;
+        int orig_height;
         volatile Object value;
         volatile Node<K,V> prev;
         volatile Node<K,V> next;
@@ -422,6 +428,16 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         Node(K key, Object value, Node<K,V> next) {
             this.key = key;
             this.value = value;
+            this.next = next;
+        }
+        /*
+        * Creates a node with height
+        */
+        
+        Node(K key, Object value, Node<K,V> next, int height) {
+            this.key = key;
+            this.value = value;
+            this.orig_height = height;
             this.next = next;
         }
 
@@ -551,6 +567,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ---------------- Indexing -------------- */
 
     /**
@@ -620,6 +640,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ---------------- Head nodes -------------- */
 
     /**
@@ -633,6 +657,89 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+		
+	
+     /*SkipTrie Helper functions*/
+    
+    public Node<K,V> putIfAbsentN(K key, V value) {
+        if (value == null)
+            throw new NullPointerException();
+        return doPutN(key, value, true);
+    }
+
+
+    public Node<K,V> lowerNode(K key) {
+        Node<K,V> n = findNear(key, LT);
+        return n;
+    }
+        
+    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey , Node<K,V> start){
+                
+       Comparable<? super K> key = comparable(kkey);
+        for (;;) {
+            
+            Node<K,V> n = start;
+            Node<K,V> b = null;
+                        
+            while(key.compareTo(n.key) > 0 ){
+                b = n;
+                n = b.next;
+                //System.out.println(key.compareTo(n.key));
+                
+            }
+            
+            if((b.value != null) && (b.next.value != null)){
+                if(b.next == n){
+                    //System.out.println(b.key + " " + n.key);
+                    return  new Pair<>(b, n);
+                }
+            }
+            
+        }
+    }
+    
+    public void fixPrev(Node<K,V> pred, Node<K,V> node){
+        Pair<Node <K,V>, Node <K,V>> pair = listSearch(node.key, pred);
+        Node<K,V> node_prev;
+            
+        while(node.value != null){
+             node_prev = node.prev;
+            if(node.prev.casPrev(node_prev, pair.left)){
+                return;
+            }
+            pair = listSearch(node.key, pred);
+        }
+        node.ready = 1;
+    }
+    
+    public void topLevelDelete(Node<K,V> pred, Node<K,V> node){
+    
+        Pair<Node <K,V>, Node <K,V>> pair;
+        
+        if(node.ready != 1){
+            fixPrev(pred, node);
+        }
+        this.remove(node.key);
+        do{
+            pair = listSearch(node.key, pred);
+            fixPrev(pair.left, pair.right);
+        }while(pair.right != null);
+        
+    }
+    
+    public Node<K,V> topLevelInsert(K key, Node<K,V> pred){
+        Node <K,V> node = this.add(key);
+        fixPrev(node, pred);
+        return node;
+    }
+    
+	
+	
+	
+	
     /* ---------------- Comparison utilities -------------- */
 
     /**
@@ -712,6 +819,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
     
+	
+	
+	
+	
     /* ---------------- Traversal -------------- */
 
     /**
@@ -904,6 +1015,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ---------------- Insertion -------------- */
 
     /**
@@ -945,11 +1060,52 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     }
                     // else c < 0; fall through
                 }
-
-                Node<K,V> z = new Node<K,V>(kkey, value, n);
-                if (!b.casNext(n, z))
-                    break;         // restart if lost race to append to b
                 int level = randomLevel();
+                Node<K,V> z = new Node<K,V>(kkey, value, n, level);
+                if (!b.casNext(n, z))
+                    break;         // restart if lost race to append to b                
+                if (level > 0)
+                    insertIndex(z, level);
+                return null;
+            }
+        }
+    }
+    
+    private Node<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
+        Comparable<? super K> key = comparable(kkey);
+        for (;;) {
+            Node<K,V> b = findPredecessor(key);
+            Node<K,V> n = b.next;
+            for (;;) {
+                if (n != null) {
+                    Node<K,V> f = n.next;
+                    if (n != b.next)               // inconsistent read
+                        break;;
+                    Object v = n.value;
+                    if (v == null) {               // n is deleted
+                        n.helpDelete(b, f);
+                        break;
+                    }
+                    if (v == n || b.value == null) // b is deleted
+                        break;
+                    int c = key.compareTo(n.key);
+                    if (c > 0) {
+                        b = n;
+                        n = f;
+                        continue;
+                    }
+                    if (c == 0) {
+                        if (onlyIfAbsent || n.casValue(v, value))
+                            return null;
+                        else
+                            break; // restart if lost race to replace value
+                    }
+                    // else c < 0; fall through
+                }
+                int level = randomLevel();
+                Node<K,V> z = new Node<K,V>(kkey, value, n, level);
+                if (!b.casNext(n, z))
+                    break;         // restart if lost race to append to b                
                 if (level > 0)
                     insertIndex(z, level);
                 return null;
@@ -966,15 +1122,22 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * Marsaglia's "Xorshift RNGs" paper.  This is not a high-quality
      * generator but is acceptable here.
      */
-    private int randomLevel() {
+    private int randomLevel() {		
         int x = randomSeed;
         x ^= x << 13;
         x ^= x >>> 17;
         randomSeed = x ^= x << 5;
-        if ((x & 0x8001) != 0) // test highest and lowest bits
+		
+		// This is a double coin toss. If either lands on heads level will be 0
+		/*
+        if ((x & 0x8001) != 0) // test highest and lowest bits 0x0100
             return 0;
-        int level = 1;
-        while (((x >>>= 1) & 1) != 0) ++level;
+		*/
+		
+		// Instead, follow paper's authors and do a fair toss for each level
+		int numLevels = 5; // This is log log keyspace (where keyspace is num ints: 2^32)
+        int level = 0;
+        while (((x >>>= 1) & 1 ) != 0 && level < numLevels) ++level;
         return level;
     }
 
@@ -988,7 +1151,8 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         int max = h.level;
         
         if(level >= max){
-            System.out.println("Adding a top level node");
+            System.out.println("Adding a top level node " + z.key + " level:" + level);
+            
         }
 
         if (level <= max) {
@@ -1096,10 +1260,14 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
     
-    public boolean add(K k) {
-        return this.putIfAbsent(k, (V)Boolean.TRUE) == null;
+    public Node<K,V> add(K k) {
+        return this.putIfAbsentN(k, (V)Boolean.TRUE);
     }
 
+	
+	
+	
+	
     /* ---------------- Deletion -------------- */
 
     /**
@@ -1198,6 +1366,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             casHead(d, h);   // try to backout
     }
 
+	
+	
+	
+	
     /* ---------------- Finding and removing first element -------------- */
 
     /**
@@ -1263,6 +1435,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
 
+	
+	
+	
+	
     /* ---------------- Finding and removing last element -------------- */
 
     /**
@@ -1389,6 +1565,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ---------------- Relational operations -------------- */
 
     // Control values OR'ed as arguments to findNear
@@ -1451,6 +1631,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
 
+	
+	
+	
+	
     /* ---------------- Constructors -------------- */
 
     /**
@@ -1582,6 +1766,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         head = h;
     }
 
+	
+	
+	
+	
     /* ---------------- Serialization -------------- */
 
     /**
@@ -1670,6 +1858,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         head = h;
     }
 
+	
+	
+	
+	
     /* ------ Map API methods ------ */
 
     /**
@@ -1798,6 +1990,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         initialize();
     }
 
+	
+	
+	
+	
     /* ---------------- View methods -------------- */
 
     /*
@@ -1902,6 +2098,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return descendingMap().navigableKeySet();
     }
 
+	
+	
+	
+	
     /* ---------------- AbstractMap Overrides -------------- */
 
     /**
@@ -1940,6 +2140,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ------ ConcurrentMap API methods ------ */
 
     /**
@@ -2020,6 +2224,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
+	
+	
+	
+	
     /* ------ SortedMap API methods ------ */
 
     public Comparator<? super K> comparator() {
@@ -2114,6 +2322,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return tailMap(fromKey, true);
     }
 
+	
+	
+	
+	
     /* ---------------- Relational operations -------------- */
 
     /**
@@ -2137,74 +2349,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         Node<K,V> n = findNear(key, LT);
         return (n == null)? null : n.key;
     }
-    
-     /*SkipTrie Helper functions*/
-    
-    public Node<K,V> lowerNode(K key) {
-        Node<K,V> n = findNear(key, LT);
-        return n;
-    }
-    
-    
-    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey , Node<K,V> start){
-                
-       Comparable<? super K> key = comparable(kkey);
-        for (;;) {
-            
-            Node<K,V> n = start;
-            Node<K,V> b = null;
-                        
-            while(key.compareTo(n.key) > 0 ){
-                b = n;
-                n = b.next;
-                //System.out.println(key.compareTo(n.key));
-                
-            }
-            
-            if((b.value != null) && (b.next.value != null)){
-                if(b.next == n){
-                    //System.out.println(b.key + " " + n.key);
-                    return  new Pair<>(b, n);
-                }
-            }
-            
-        }
-    }
-    
-    public void fixPrev(Node<K,V> pred, Node<K,V> node){
-        Pair<Node <K,V>, Node <K,V>> pair = listSearch(node.key, pred);
-        Node<K,V> node_prev;
-            
-        while(node.value != null){
-             node_prev = node.prev;
-            if(node.prev.casPrev(node_prev, pair.left)){
-                return;
-            }
-            pair = listSearch(node.key, pred);
-        }
-        node.ready = 1;
-    }
-    
-    public void topLevelDelete(Node<K,V> pred, Node<K,V> node){
-    
-        Pair<Node <K,V>, Node <K,V>> pair;
-        
-        if(node.ready != 1){
-            fixPrev(pred, node);
-        }
-        this.remove(node.key);
-        do{
-            pair = listSearch(node.key, pred);
-            fixPrev(pair.left, pair.right);
-        }while(pair.right != null);
-        
-    }
-    
-    public void topLevelInsert(K key, Node<K,V> pred){
-        this.add(key);
-        
-    }
-    
 
     /**
      * Returns a key-value mapping associated with the greatest key
@@ -2331,6 +2475,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
 
 
+	
+	
+	
+	
     /* ---------------- Iterators -------------- */
 
     /**
@@ -2430,6 +2578,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return new EntryIterator();
     }
 
+	
+	
+	
+	
     /* ---------------- View Classes -------------- */
 
     /*
