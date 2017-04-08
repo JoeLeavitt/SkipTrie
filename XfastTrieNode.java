@@ -10,6 +10,7 @@ public class XfastTrieNode {
     ConcurrentHashMap<Integer, XfastTrieNode> children = new ConcurrentHashMap<Integer, XfastTrieNode>();
 
     boolean isLeaf;
+    boolean isMarked;
     XfastTrieNode left;
     XfastTrieNode right;
     XfastTrieNode back;
@@ -18,6 +19,5 @@ public class XfastTrieNode {
 
     public XfastTrieNode(int bits){
         this.bits = bits;
-
     }
 }

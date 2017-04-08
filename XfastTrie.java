@@ -77,6 +77,44 @@ public class XfastTrie {
         return node;
     }
 
+    // Gets lowest ancestor and makes sure its a real value
+    public XfastTrieNode xFastTriePred(String binaryString){
+        XfastTrieNode node = lowestAncestor(binaryString);
+
+        if(node == null) {
+            System.out.println("No pred found");
+            return node;
+        }
+
+        if(node.isLeaf){
+            node.isMarked = true;
+            System.out.println("The prefix is indeed an ancestor");
+        }
+        else{
+            System.out.println("The prefix is not an ancestor");
+        }
+
+        return node;
+    }
+
+    // Searches for lowest ancestor from data in the skiplist
+    public XfastTrieNode lowestAncestor(String binaryString) {
+        String prefix = "";
+        XfastTrieNode node = null;
+
+        for(int i = 1; i < binaryString.length(); i++){
+            prefix = binaryString.substring(0, binaryString.length() - i);
+            node = searchNode(prefix);
+            if (node != null) break;
+        }
+
+        int base10 = Integer.parseInt(binaryString, 2);
+
+        System.out.println("Possible ancestor for " + base10 + " is " + prefix);
+
+        return node;
+    }
+
     public XfastTrieNode successor(){
         return null;
     }
