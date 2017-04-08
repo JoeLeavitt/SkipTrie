@@ -662,8 +662,59 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	
 		
 	
-     /*SkipTrie Helper functions*/
-    
+	/* --------SKIPTRIE MODIFICATIONS--------- */
+	
+        /**
+         * Additional modifications:
+         * 
+         * - randomLevel() modified to give fair coin chance for level promotion
+         * 
+         * - public Node<K,V> add(K k) modified to accept node rather than bool
+         * 
+         */
+	
+	private Node<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
+	Comparable<? super K> key = comparable(kkey);
+        for (;;) {
+            Node<K,V> b = findPredecessor(key);
+            Node<K,V> n = b.next;
+            for (;;) {
+                if (n != null) {
+                    Node<K,V> f = n.next;
+                    if (n != b.next)               // inconsistent read
+                        break;;
+                    Object v = n.value;
+                    if (v == null) {               // n is deleted
+                        n.helpDelete(b, f);
+                        break;
+                    }
+                    if (v == n || b.value == null) // b is deleted
+                        break;
+                    int c = key.compareTo(n.key);
+                    if (c > 0) {
+                        b = n;
+                        n = f;
+                        continue;
+                    }
+                    if (c == 0) {
+                        if (onlyIfAbsent || n.casValue(v, value))
+                            return null;
+                        else
+                            break; // restart if lost race to replace value
+                    }
+                    // else c < 0; fall through
+                }
+                int level = randomLevel();
+                Node<K,V> z = new Node<K,V>(kkey, value, n, level);
+                if (!b.casNext(n, z))
+                    break;         // restart if lost race to append to b                
+                if (level > 0)
+                    insertIndex(z, level);
+                return null;
+            }
+        }
+    }
+	
     public Node<K,V> putIfAbsentN(K key, V value) {
         if (value == null)
             throw new NullPointerException();
@@ -1071,48 +1122,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
     
-    private Node<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
-        Comparable<? super K> key = comparable(kkey);
-        for (;;) {
-            Node<K,V> b = findPredecessor(key);
-            Node<K,V> n = b.next;
-            for (;;) {
-                if (n != null) {
-                    Node<K,V> f = n.next;
-                    if (n != b.next)               // inconsistent read
-                        break;;
-                    Object v = n.value;
-                    if (v == null) {               // n is deleted
-                        n.helpDelete(b, f);
-                        break;
-                    }
-                    if (v == n || b.value == null) // b is deleted
-                        break;
-                    int c = key.compareTo(n.key);
-                    if (c > 0) {
-                        b = n;
-                        n = f;
-                        continue;
-                    }
-                    if (c == 0) {
-                        if (onlyIfAbsent || n.casValue(v, value))
-                            return null;
-                        else
-                            break; // restart if lost race to replace value
-                    }
-                    // else c < 0; fall through
-                }
-                int level = randomLevel();
-                Node<K,V> z = new Node<K,V>(kkey, value, n, level);
-                if (!b.casNext(n, z))
-                    break;         // restart if lost race to append to b                
-                if (level > 0)
-                    insertIndex(z, level);
-                return null;
-            }
-        }
-    }
-
     /**
      * Returns a random level for inserting a new node.
      * Hardwired to k=1, p=0.5, max 31 (see above and
