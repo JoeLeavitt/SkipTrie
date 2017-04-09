@@ -396,17 +396,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	
     /* ---------------- Nodes -------------- */
     
-    public static class Pair<X, Y> {
-        
-        public final X left; 
-        public final Y right; 
-        
-        public Pair(X left, Y right) { 
-        this.left = left; 
-        this.right = right; 
-        } 
-    } 
-
     /**
      * Nodes hold keys and values, and are singly linked in sorted
      * order, possibly with some intervening marker nodes. The list is
@@ -414,13 +403,15 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * is declared only as Object because it takes special non-V
      * values for marker and header nodes.
      */
-    static final class Node<K,V> {
+	/** MODIFICATIONS FOR SKIPTRIE:
+	 * - made public so that SkipTrie.java and XFastTrie.java can use
+	 * - added orig_height to track top level nodes
+	 */
+    public static final class Node<K,V> {
         final K key;
-        int orig_height;
         volatile Object value;
-        volatile Node<K,V> prev;
         volatile Node<K,V> next;
-        int ready = 0;
+		int orig_height;
 
         /**
          * Creates a new regular node.
@@ -430,17 +421,19 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.value = value;
             this.next = next;
         }
-        /*
-        * Creates a node with height
-        */
-        
+		
+		
+		/**
+         * Creates a new regular node with height
+         */
         Node(K key, Object value, Node<K,V> next, int height) {
             this.key = key;
             this.value = value;
-            this.orig_height = height;
             this.next = next;
+			this.orig_height = height;
         }
-
+		
+		
         /**
          * Creates a new marker node. A marker is distinguished by
          * having its value field point to itself.  Marker nodes also
@@ -463,11 +456,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         static final AtomicReferenceFieldUpdater<Node, Object>
             valueUpdater = AtomicReferenceFieldUpdater.newUpdater
             (Node.class, Object.class, "value");
-        
-        /** Updater for casPrev */
-        static final AtomicReferenceFieldUpdater<Node, Node>
-            prevUpdater = AtomicReferenceFieldUpdater.newUpdater
-            (Node.class, Node.class, "prev");
 
         /**
          * compareAndSet value field
@@ -483,12 +471,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             return nextUpdater.compareAndSet(this, cmp, val);
         }
         
-        /**
-         * compareAndSet value field
-         */
-        boolean casPrev(Object cmp, Object val) {
-            return valueUpdater.compareAndSet(this, cmp, val);
-        }
 
         /**
          * Returns true if this node is a marker. This method isn't
@@ -580,10 +562,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * ways, that can't nicely be captured by placing field in a
      * shared abstract class.
      */
-    static class Index<K,V> {
+	/** MODIFICATIONS FOR SKIPTRIE:
+	 * made public so that SkipTrie.java and XFastTrie.java can use
+	 * added left for top level DLL
+	 * added ready flag
+	 */
+    public static class Index<K,V> {
         final Node<K,V> node;
         final Index<K,V> down;
         volatile Index<K,V> right;
+		volatile Node<K,V> prev;
+		int ready = 0;
 
         /**
          * Creates index node with given values.
@@ -662,16 +651,43 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	
 		
 	
-	/* --------SKIPTRIE MODIFICATIONS--------- */
+	/* -------- SKIPTRIE MODIFICATIONS --------- */
 	
-        /**
-         * Additional modifications:
+        /** ADDITIONAL MODIFICIATIONS
          * 
          * - randomLevel() modified to give fair coin chance for level promotion
          * 
          * - public Node<K,V> add(K k) modified to accept node rather than bool
-         * 
+		 *
+         * - insertIndex : removed limit on number of levels to increase (will be capped by num
+		 * 			generated in randomLevel() )
+		 *
+		 * - exposed the node and index class so that skiptrie and xfasttrie can use them.
+		 * 			It shouldn't be nessary to do this for HeadIndex as it can be treated as an index
+		 * 
+		 * - added left field to IndexNode
          */
+	
+	public static class Pair<X, Y> {
+        
+        public final X left; 
+        public final Y right; 
+        
+        public Pair(X left, Y right) { 
+        this.left = left; 
+        this.right = right; 
+        } 
+    } 
+	
+	/** Updater for casPrev */
+	static final AtomicReferenceFieldUpdater<Index, Index>
+		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+		(Index.class, Index.class, "prev");
+		
+	/** compareAndSet value field */
+	boolean casPrev(Object cmp, Object val) {
+		return valueUpdater.compareAndSet(this, cmp, val);
+	}
 	
 	private Node<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
@@ -719,15 +735,54 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         if (value == null)
             throw new NullPointerException();
         return doPutN(key, value, true);
+    }       
+	
+	/**
+	 * FIND PRED ON A GIVEN LEVEL: 			takes a node
+	 * start on some level ℓ with start.key < x, and returns a
+	 * pair (left, right) of nodes on level ℓ such that left.key <
+	 * x ≤ right.key, and moreover, at some point during the in-
+	 * vocation, left and right were both unmarked, and we had
+	 * left.next = right.
+	 * 
+	 * if a marked node prevents it from finding an
+	 * unmarked pair of nodes (left, right) as required (e.g., be-
+	 * cause there is a marked node between left and right), then
+	 * listSearch will unlink the node.
+	 */
+	 
+	// Harold and Landry's version modified by Jason
+	public Pair<Index<K,V>,Index<K,V>> listSearch (Comparable<? super K> key, Index<K,V> start){
+        for (;;) {
+            
+            Index<K,V> n = start;
+            Index<K,V> b = null;
+                        
+            while(key.compareTo(n.node.key) > 0 ){
+                b = n;
+                n = b.next;
+            }
+            
+            if((b.node.value != null) && (b.node.value != null)){
+                if(b.next == n){
+                    return  new Pair<>(b, n);
+                }
+            }  
+        }
     }
-
-
-    public Node<K,V> lowerNode(K key) {
-        Node<K,V> n = findNear(key, LT);
-        return n;
-    }
-        
-    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey , Node<K,V> start){
+	
+	/* Another possible listsearch
+	public Pair<Index<K,V>,Index<K,V>> listSearch (Comparable<? super K> key){
+		Index<K,V> left = FindPredecessor(key);
+		Index<K,V> right = left.right;
+		if (right.down.key <= key){
+			return (Pair(left, left.right));
+		}
+    } 
+	*/
+	
+	 /* Harold and Joe Landry's listSearch
+    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey, Node<K,V> start){
                 
        Comparable<? super K> key = comparable(kkey);
         for (;;) {
@@ -751,39 +806,41 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             
         }
     }
+	*/
     
-    public void fixPrev(Node<K,V> pred, Node<K,V> node){
-        Pair<Node <K,V>, Node <K,V>> pair = listSearch(node.key, pred);
-        Node<K,V> node_prev;
+    public void fixPrev(Index<K,V> pred, Index<K,V> index){
+        Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
+        <Index<K,V> index_prev;
             
-        while(node.value != null){
-             node_prev = node.prev;
-            if(node.prev.casPrev(node_prev, pair.left)){
+        while(index.node.value != null){
+            index_prev = index.prev;
+            if(index.prev.casPrev(index_prev, pair.left)){
                 return;
             }
-            pair = listSearch(node.key, pred);
+            pair = listSearch(index.node.key, pred);
         }
-        node.ready = 1;
+        index.ready = 1;
     }
     
-    public void topLevelDelete(Node<K,V> pred, Node<K,V> node){
+    public void topLevelDelete(Index<K,V> pred, Index<K,V> index){
     
-        Pair<Node <K,V>, Node <K,V>> pair;
+        Pair<Index<K,V>,Index<K,V>> pair;
         
         if(node.ready != 1){
-            fixPrev(pred, node);
+            fixPrev(pred, index);
         }
-        this.remove(node.key);
-        do{
+        this.remove(index.node.key);
+        do{													// Will this work after this.remove???
             pair = listSearch(node.key, pred);
             fixPrev(pair.left, pair.right);
         }while(pair.right != null);
         
     }
     
-    public Node<K,V> topLevelInsert(K key, Node<K,V> pred){
-        Node <K,V> node = this.add(key);
-        fixPrev(node, pred);
+	// Will probably need to ensure level is assigned to node
+    public Node<K,V> topLevelInsert(K key, Index<K,V> pred){
+        Node <K,V> node = this.add(key);			
+        // fixPrev(node, pred); 		// This is handled in insert b/c need to pass in index
         return node;
     }
     
@@ -911,7 +968,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     q = d;
                     r = d.right;
                 } else
-                    return q.node;
+                    return q.node;		// return base header if no key less than key
             }
         }
     }
@@ -1130,7 +1187,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * This uses the simplest of the generators described in George
      * Marsaglia's "Xorshift RNGs" paper.  This is not a high-quality
      * generator but is acceptable here.
-     */
+     */ 
+	/** MODIFICATIONS FOR SKIPTRIE:
+	 * max is now 5, p = 0.5 for first level and all
+	 */
     private int randomLevel() {		
         int x = randomSeed;
         x ^= x << 13;
@@ -1155,15 +1215,21 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * @param z the node
      * @param level the level of the index
      */
+	/** MODIFICATIONS FOR SKIPTRIE:
+	 * Now inserts indexes up to node's level, not just one more than head
+	 */
     private void insertIndex(Node<K,V> z, int level) {
         HeadIndex<K,V> h = head;
         int max = h.level;
         
-        if(level >= max){
-            System.out.println("Adding a top level node " + z.key + " level:" + level);
-            
+		if(level = 4){
+            System.out.println("Adding a top level list node: " + z.key); 
         }
-
+		
+		if(level > max){
+            System.out.println("Increasing skiplist head height to: " + level);
+        }
+		
         if (level <= max) {
             Index<K,V> idx = null;
             for (int i = 1; i <= level; ++i)
@@ -1179,11 +1245,11 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
              * creating new head index nodes from the opposite
              * direction.
              */
-            level = max + 1;
+            // level = max + 1;  // Removed this line so that new heads are created up to level
             Index<K,V>[] idxs = (Index<K,V>[])new Index[level+1];
             Index<K,V> idx = null;
             for (int i = 1; i <= level; ++i)
-                idxs[i] = idx = new Index<K,V>(z, idx, null);
+                idxs[i] = idx = new Index<K,V>(z, idx, null);	// stack new indexes up to level
 
             HeadIndex<K,V> oldh;
             int k;
@@ -1197,7 +1263,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 HeadIndex<K,V> newh = oldh;
                 Node<K,V> oldbase = oldh.node;
                 for (int j = oldLevel+1; j <= level; ++j)
-                    newh = new HeadIndex<K,V>(oldbase, newh, idxs[j], j);
+                    newh = new HeadIndex<K,V>(oldbase, newh, idxs[j], j); // stack headers up to level
                 if (casHead(oldh, newh)) {
                     k = oldLevel;
                     break;
