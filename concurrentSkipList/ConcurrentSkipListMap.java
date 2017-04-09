@@ -471,7 +471,20 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             return nextUpdater.compareAndSet(this, cmp, val);
         }
         
-
+        
+        
+        /** Updater for casPrev */
+	static final AtomicReferenceFieldUpdater<Index, Index>
+		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+		(Index.class, Index.class, "prev");
+	
+        /// FOR SKIPTRIE
+	/** compareAndSet value field */
+	boolean casPrev(Object cmp, Object val) {
+		return valueUpdater.compareAndSet(this, cmp, val);
+	}
+        
+        
         /**
          * Returns true if this node is a marker. This method isn't
          * actually called in any current code checking for markers
@@ -571,8 +584,8 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         final Node<K,V> node;
         final Index<K,V> down;
         volatile Index<K,V> right;
-		volatile Node<K,V> prev;
-		int ready = 0;
+        volatile Index<K,V> prev;
+        int ready = 0;
 
         /**
          * Creates index node with given values.
@@ -679,15 +692,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         } 
     } 
 	
-	/** Updater for casPrev */
-	static final AtomicReferenceFieldUpdater<Index, Index>
-		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
-		(Index.class, Index.class, "prev");
-		
-	/** compareAndSet value field */
-	boolean casPrev(Object cmp, Object val) {
-		return valueUpdater.compareAndSet(this, cmp, val);
-	}
+
 	
 	private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
@@ -751,7 +756,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 */
 	 
 	// Harold and Landry's version modified by Jason
-	public Pair<Index<K,V>,Index<K,V>> listSearch (Comparable<? super K> key, Index<K,V> start){
+    public Pair<Index<K,V>,Index<K,V>> listSearch (K kkey, Index<K,V> start){
+        
+        Comparable<? super K> key = comparable(kkey);
+                
         for (;;) {
             
             Index<K,V> n = start;
@@ -759,11 +767,11 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                         
             while(key.compareTo(n.node.key) > 0 ){
                 b = n;
-                n = b.next;
+                n = b.right;
             }
             
             if((b.node.value != null) && (b.node.value != null)){
-                if(b.next == n){
+                if(b.right == n){
                     return  new Pair<>(b, n);
                 }
             }  
@@ -809,7 +817,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     
     public void fixPrev(Index<K,V> pred, Index<K,V> index){
         Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
-        <Index<K,V> index_prev;
+        Index<K,V> index_prev;
             
         while(index.node.value != null){
             index_prev = index.prev;
@@ -825,21 +833,23 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     
         Pair<Index<K,V>,Index<K,V>> pair;
         
-        if(node.ready != 1){
+        if(index.ready != 1){
             fixPrev(pred, index);
         }
         this.remove(index.node.key);
         do{													// Will this work after this.remove???
-            pair = listSearch(node.key, pred);
+            pair = listSearch(index.node.key, pred);
             fixPrev(pair.left, pair.right);
         }while(pair.right != null);
         
     }
     
 	// Will probably need to ensure level is assigned to node
-    public Node<K,V> topLevelInsert(K key, Index<K,V> pred){
-        Index<K,V> topIndex = this.putIfAbsentN(k, (V)Boolean.TRUE)			
+    public Index<K,V> topLevelInsert(K key, Index<K,V> pred){
+        Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
+        
         fixPrev(pred, topIndex); 
+        
         return topIndex;
     }
     
@@ -1222,7 +1232,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         HeadIndex<K,V> h = head;
         int max = h.level;
         
-		if(level = 4){
+	if(level == 4){
             System.out.println("Adding a top level list node: " + z.key); 
         }
 		
