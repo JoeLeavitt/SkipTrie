@@ -469,7 +469,12 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
          */
         boolean casNext(Node<K,V> cmp, Node<K,V> val) {
             return nextUpdater.compareAndSet(this, cmp, val);
-        }        
+        }
+        
+        
+        
+        
+        
         
         /**
          * Returns true if this node is a marker. This method isn't
@@ -565,7 +570,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 * made public so that SkipTrie.java and XFastTrie.java can use
 	 * added left for top level DLL
 	 * added ready flag
-     * added casPrev stuff
 	 */
     public static class Index<K,V> {
         final Node<K,V> node;
@@ -582,6 +586,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.down = down;
             this.right = right;
         }
+        
+        /** Updater for casPrev */
+	static final AtomicReferenceFieldUpdater<Index, Index>
+		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+		(Index.class, Index.class, "prev");
+	
+        /// FOR SKIPTRIE
+	/** compareAndSet value field */
+	boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
+		return prevUpdater.compareAndSet(this, cmp, val);
+	}
 
         /** Updater for casRight */
         static final AtomicReferenceFieldUpdater<Index, Index>
@@ -594,19 +609,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         final boolean casRight(Index<K,V> cmp, Index<K,V> val) {
             return rightUpdater.compareAndSet(this, cmp, val);
         }
-        
-        /// FOR SKIPTRIE
-        /** Updater for casPrev */
-	static final AtomicReferenceFieldUpdater<Index, Index>
-		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
-		(Index.class, Index.class, "prev");
-	
-        
-	/** compareAndSet value field */
-	boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
-		return prevUpdater.compareAndSet(this, cmp, val);
-	}
-        
+
         /**
          * Returns true if the node this indexes has been deleted.
          * @return true if indexed node is known to be deleted
@@ -690,10 +693,42 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         this.right = right; 
         } 
     } 
+        
+        public Index<K,V> skipListPred(Comparable<? super K> key, Index<K,V> start) {
+        if (key == null)
+            throw new NullPointerException(); // don't postpone errors
+        for (;;) {
+            Index<K,V> q = start;
+            Index<K,V> r = q.right;
+            for (;;) {
+                if (r != null) {
+                    Node<K,V> n = r.node;
+                    K k = n.key;
+                    if (n.value == null) {
+                        if (!q.unlink(r))
+                            break;           // restart
+                        r = q.right;         // reread r
+                        continue;
+                    }
+                    if (key.compareTo(k) > 0) {
+                        q = r;
+                        r = r.right;
+                        continue;
+                    }
+                }
+                Index<K,V> d = q.down;
+                if (d != null) {
+                    q = d;
+                    r = d.right;
+                } else
+                    return q;		// return base header if no key less than key
+            }
+        }
+    }
 	
 
 	
-	private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
+    private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
         for (;;) {
             Node<K,V> b = findPredecessor(key);
@@ -728,8 +763,12 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 Node<K,V> z = new Node<K,V>(kkey, value, n, level);
                 if (!b.casNext(n, z))
                     break;         // restart if lost race to append to b                
-                if (level > 0)
+                if (level > 0){
                     return insertIndex(z, level);
+                }
+                else{
+                    return new Index<K,V>(z,null, null);
+                }
             }
         }
     }
@@ -828,19 +867,21 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         index.ready = 1;
     }
     
-    public void topLevelDelete(Index<K,V> pred, Index<K,V> index){
+    public boolean topLevelDelete(Index<K,V> pred, Index<K,V> index){
     
         Pair<Index<K,V>,Index<K,V>> pair;
+        V result;
         
         if(index.ready != 1){
             fixPrev(pred, index);
         }
-        this.remove(index.node.key);
+        result = this.remove(index.node.key);
         do{													// Will this work after this.remove???
             pair = listSearch(index.node.key, pred);
             fixPrev(pair.left, pair.right);
         }while(pair.right != null);
         
+        return (result == null);
     }
     
 	// Will probably need to ensure level is assigned to node
@@ -1231,13 +1272,13 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         HeadIndex<K,V> h = head;
         int max = h.level;
         
-	if(level == 4){
-            System.out.println("Adding a top level list node: " + z.key); 
-        }
-		
-		if(level > max){
-            System.out.println("Increasing skiplist head height to: " + level);
-        }
+//	if(level == 4){
+//            System.out.println("Adding a top level list node: " + z.key); 
+//        }
+//		
+//        if(level > max){
+//            System.out.println("Increasing skiplist head height to: " + level);
+//        }
 		
         if (level <= max) {
             Index<K,V> idx = null;
@@ -1280,7 +1321,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 }
             }
             addIndex(idxs[k], oldh, k);
-			return (idxs[k]);
+    return (idxs[k]);
         }
     }
 
@@ -1346,9 +1387,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
     	
-	public boolean add(K k) {
-        return this.putIfAbsent(k, (V)Boolean.TRUE) == null;
-    }
+	public Index<K,V> add(K k) {
+            return this.putIfAbsentN(k, (V)Boolean.TRUE);
+        }
 	
 	
 	
