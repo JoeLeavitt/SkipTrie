@@ -20,9 +20,16 @@ public class Test {
     public static void main(String [] args){
         
         ConcurrentSkipListMap<Integer, Boolean> skiplist = new ConcurrentSkipListMap<>();
-        SkipTrie skiptrie = new SkipTrie();
+        SkipTrie skipTrie = new SkipTrie();
         
-        //skiptrie.insert(2);
+        for(int i = 0; i < 10; i++){
+            System.out.println(skipTrie.insert(i));
+        }
+        
+        ConcurrentSkipListMap.Index<Integer,Boolean> node = skipTrie.lowestAncestor(2);
+        
+        System.out.println(node);
+        
     
 //          for(int i = 0; i< 20; i++){
 //              skiplist.add(i+1);
@@ -59,7 +66,7 @@ public class Test {
         System.out.println("Hash Test");
         
         LockFreeHashSet hash = new LockFreeHashSet(300);
-        //SkipTrie.TrieNode tn = new SkipTrie.TrieNode;
+//        SkipTrie.TrieNode tn = new SkipTrie.TrieNode;
         
                
         hash.add(3, 3);
@@ -67,7 +74,7 @@ public class Test {
         hash.add(1, 1);
         hash.remove(3);
         
-        System.out.println(hash.lookup(1).getClass());
+        System.out.println(hash.lookup(1));
         
         
 //        String binaryString = String.format("%32s", Integer.toBinaryString(13)).replace(' ', '0');

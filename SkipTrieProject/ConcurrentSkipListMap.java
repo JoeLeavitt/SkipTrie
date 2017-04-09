@@ -329,6 +329,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      * random number generators used in randomLevel.
      */
     private static final Random seedGenerator = new Random();
+    
+	// FOR SKIPTRIE: 5 levels is log log keyspace (where keyspace is num ints: 2^32)
+    private static final int TOP = 4;
 
     /**
      * Special value used to identify base-level header
@@ -698,7 +701,13 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         if (key == null)
             throw new NullPointerException(); // don't postpone errors
         for (;;) {
-            Index<K,V> q = start;
+            Index<K,V> q;
+            if(start != null){
+                q = start;
+            }
+            else{
+                q = head;
+            }
             Index<K,V> r = q.right;
             for (;;) {
                 if (r != null) {
@@ -793,78 +802,61 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 * listSearch will unlink the node.
 	 */
 	 
-	// Harold and Landry's version modified by Jason
+
+    // Harold and Landry's version modified by Jason
     public Pair<Index<K,V>,Index<K,V>> listSearch (K kkey, Index<K,V> start){
         
         Comparable<? super K> key = comparable(kkey);
-                
+        
+        if (kkey == null)
+            throw new NullPointerException(); // don't postpone errors
+        
         for (;;) {
-            
-            Index<K,V> n = start;
-            Index<K,V> b = null;
-                        
-            while(key.compareTo(n.node.key) > 0 ){
-                b = n;
-                n = b.right;
+            Index<K,V> q;
+            if(start != null){
+                q = start;
             }
-            
-            if((b.node.value != null) && (b.node.value != null)){
-                if(b.right == n){
-                    return  new Pair<>(b, n);
+            else{
+                q = head;
+            }
+            Index<K,V> r = q.right;
+            for (;;) {
+                if (r != null) {
+                    Node<K,V> n = r.node;
+                    K k = n.key;
+                    if (n.value == null) {
+                        if (!q.unlink(r))
+                            break;           // restart
+                        r = q.right;         // reread r
+                        continue;
+                    }
+                    if (key.compareTo(k) > 0) {
+                        q = r;
+                        r = r.right;
+                        continue;
+                    }
                 }
-            }  
+                return new Pair<>(q, q.right);    
+            }
         }
     }
-	
-	/* Another possible listsearch
-	public Pair<Index<K,V>,Index<K,V>> listSearch (Comparable<? super K> key){
-		Index<K,V> left = FindPredecessor(key);
-		Index<K,V> right = left.right;
-		if (right.down.key <= key){
-			return (Pair(left, left.right));
-		}
-    } 
-	*/
-	
-	 /* Harold and Joe Landry's listSearch
-    public Pair<Node<K,V>,Node<K,V>> listSearch (K kkey, Node<K,V> start){
-                
-       Comparable<? super K> key = comparable(kkey);
-        for (;;) {
-            
-            Node<K,V> n = start;
-            Node<K,V> b = null;
-                        
-            while(key.compareTo(n.key) > 0 ){
-                b = n;
-                n = b.next;
-                //System.out.println(key.compareTo(n.key));
-                
-            }
-            
-            if((b.value != null) && (b.next.value != null)){
-                if(b.next == n){
-                    //System.out.println(b.key + " " + n.key);
-                    return  new Pair<>(b, n);
-                }
-            }
-            
-        }
-    }
-	*/
     
     public void fixPrev(Index<K,V> pred, Index<K,V> index){
         Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
+        
+        // Note that pair.left may be the head of the DLL    
+        
         Index<K,V> index_prev;
-            
+        
         while(index.node.value != null){
             index_prev = index.prev;
-            if(index.prev.casPrev(index_prev, pair.left)){
+            //Need to handle case where index_prev is null
+            if(index.prev.casPrev(index_prev, pair.left)){  
+                index.ready = 1;
                 return;
             }
             pair = listSearch(index.node.key, pred);
         }
-        index.ready = 1;
     }
     
     public boolean topLevelDelete(Index<K,V> pred, Index<K,V> index){
@@ -884,11 +876,12 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return (result == null);
     }
     
-	// Will probably need to ensure level is assigned to node
+    // Will probably need to ensure level is assigned to node
     public Index<K,V> topLevelInsert(K key, Index<K,V> pred){
         Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
         
-        fixPrev(pred, topIndex); 
+        if(topIndex != null && topIndex.node.orig_height == TOP)
+            fixPrev(pred, topIndex); 
         
         return topIndex;
     }
@@ -1246,16 +1239,15 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         x ^= x >>> 17;
         randomSeed = x ^= x << 5;
 		
-		// This is a double coin toss. If either lands on heads level will be 0
-		/*
+        // This is a double coin toss. If either lands on heads level will be 0
+        /*
         if ((x & 0x8001) != 0) // test highest and lowest bits 0x0100
             return 0;
-		*/
+        */
 		
-		// Instead, follow paper's authors and do a fair toss for each level
-		int numLevels = 5; // This is log log keyspace (where keyspace is num ints: 2^32)
+        // Instead, follow paper's authors and do a fair toss for each level
         int level = 0;
-        while (((x >>>= 1) & 1 ) != 0 && level < numLevels) ++level;
+        while (((x >>>= 1) & 1 ) != 0 && level < TOP) ++level;
         return level;
     }
 
@@ -1271,14 +1263,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     private Index<K,V> insertIndex(Node<K,V> z, int level) {
         HeadIndex<K,V> h = head;
         int max = h.level;
-        
-//	if(level == 4){
-//            System.out.println("Adding a top level list node: " + z.key); 
-//        }
-//		
-//        if(level > max){
-//            System.out.println("Increasing skiplist head height to: " + level);
-//        }
 		
         if (level <= max) {
             Index<K,V> idx = null;
@@ -1320,8 +1304,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     break;
                 }
             }
+            idxs[k].prev = new Index<K,V>(null, null, null);
             addIndex(idxs[k], oldh, k);
-    return (idxs[k]);
+            return (idxs[k]);
         }
     }
 

@@ -126,15 +126,13 @@ public class BucketList<K,V> {
         return (curr.key == key);
     }
     
-    public Node containsN(K p){
+    public V containsN(K p){
         int key = makeRegularKey(p);
         Window window = find(head, key);
         Node pred = window.pred;
         Node curr = window.curr;
-        if(curr.key == key){
-            return curr;
-        }
-        return null;
+            return (V)curr.value;
+                
     }
       
     public BucketList<K,V> getSentinel(int index) {
@@ -173,9 +171,9 @@ public class BucketList<K,V> {
     }
     
     public void compareAndDelete(K p, SkipTrie.TrieNode n){
-        int key = makeRegularKey(p);
+        //int key = makeRegularKey(p);
         
-        if(n.key == key){
+        if(n.key == p){
             this.remove(p);
         }
     }
