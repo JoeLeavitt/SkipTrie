@@ -689,7 +689,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 		return valueUpdater.compareAndSet(this, cmp, val);
 	}
 	
-	private Node<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
+	private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
         for (;;) {
             Node<K,V> b = findPredecessor(key);
@@ -725,18 +725,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 if (!b.casNext(n, z))
                     break;         // restart if lost race to append to b                
                 if (level > 0)
-                    insertIndex(z, level);
-                return null;
+                    return insertIndex(z, level);
             }
         }
     }
 	
-    public Node<K,V> putIfAbsentN(K key, V value) {
+    public Index<K,V> putIfAbsentN(K key, V value) {
         if (value == null)
             throw new NullPointerException();
         return doPutN(key, value, true);
     }       
-	
+		
 	/**
 	 * FIND PRED ON A GIVEN LEVEL: 			takes a node
 	 * start on some level ℓ with start.key < x, and returns a
@@ -839,9 +838,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     
 	// Will probably need to ensure level is assigned to node
     public Node<K,V> topLevelInsert(K key, Index<K,V> pred){
-        Node <K,V> node = this.add(key);			
-        // fixPrev(node, pred); 		// This is handled in insert b/c need to pass in index
-        return node;
+        Index<K,V> topIndex = this.putIfAbsentN(k, (V)Boolean.TRUE)			
+        fixPrev(pred, topIndex); 
+        return topIndex;
     }
     
 	
@@ -1217,8 +1216,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
      */
 	/** MODIFICATIONS FOR SKIPTRIE:
 	 * Now inserts indexes up to node's level, not just one more than head
+	 * Changed return value to Index<K,V>, the top level node
 	 */
-    private void insertIndex(Node<K,V> z, int level) {
+    private Index<K,V> insertIndex(Node<K,V> z, int level) {
         HeadIndex<K,V> h = head;
         int max = h.level;
         
@@ -1235,6 +1235,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             for (int i = 1; i <= level; ++i)
                 idx = new Index<K,V>(z, idx, null);
             addIndex(idx, h, level);
+			return idx;
 
         } else { // Add a new level
             /*
@@ -1270,6 +1271,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 }
             }
             addIndex(idxs[k], oldh, k);
+			return (idxs[k]);
         }
     }
 
@@ -1334,11 +1336,10 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
         }
     }
-    
-    public Node<K,V> add(K k) {
-        return this.putIfAbsentN(k, (V)Boolean.TRUE);
+    	
+	public boolean add(K k) {
+        return this.putIfAbsent(k, (V)Boolean.TRUE) == null;
     }
-
 	
 	
 	
