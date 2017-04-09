@@ -469,21 +469,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
          */
         boolean casNext(Node<K,V> cmp, Node<K,V> val) {
             return nextUpdater.compareAndSet(this, cmp, val);
-        }
-        
-        
-        
-        /** Updater for casPrev */
-	static final AtomicReferenceFieldUpdater<Index, Index>
-		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
-		(Index.class, Index.class, "prev");
-	
-        /// FOR SKIPTRIE
-	/** compareAndSet value field */
-	boolean casPrev(Object cmp, Object val) {
-		return valueUpdater.compareAndSet(this, cmp, val);
-	}
-        
+        }        
         
         /**
          * Returns true if this node is a marker. This method isn't
@@ -579,6 +565,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 * made public so that SkipTrie.java and XFastTrie.java can use
 	 * added left for top level DLL
 	 * added ready flag
+     * added casPrev stuff
 	 */
     public static class Index<K,V> {
         final Node<K,V> node;
@@ -607,7 +594,19 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         final boolean casRight(Index<K,V> cmp, Index<K,V> val) {
             return rightUpdater.compareAndSet(this, cmp, val);
         }
-
+        
+        /// FOR SKIPTRIE
+        /** Updater for casPrev */
+	static final AtomicReferenceFieldUpdater<Index, Index>
+		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+		(Index.class, Index.class, "prev");
+	
+        
+	/** compareAndSet value field */
+	boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
+		return prevUpdater.compareAndSet(this, cmp, val);
+	}
+        
         /**
          * Returns true if the node this indexes has been deleted.
          * @return true if indexed node is known to be deleted
