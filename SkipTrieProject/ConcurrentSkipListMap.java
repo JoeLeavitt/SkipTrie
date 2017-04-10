@@ -579,7 +579,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         final Index<K,V> down;
         volatile Index<K,V> right;
         volatile Index<K,V> prev;
-        volatile Index<K,V> nodeA;
         int ready = 0;
 
         /**
@@ -590,14 +589,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.down = down;
             this.right = right;
         }
-        
-        Index(Index<K,V> node) {
-            this.nodeA = node;
-            this.node = null;
-            this.down = null;
-            this.right = null;
-        }
-        
+                
         /// FOR SKIPTRIE
         /** Updater for casPrev */
 		static final AtomicReferenceFieldUpdater<Index, Index>
@@ -610,17 +602,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 			return prevUpdater.compareAndSet(this, cmp, val);
 		}
                 
-         /// FOR SKIPTRIE
-        /** Updater for casNode */
-		static final AtomicReferenceFieldUpdater<Index, Index>
-		nodeUpdater = AtomicReferenceFieldUpdater.newUpdater
-		(Index.class, Index.class, "nodeA");
-	
-        /// FOR SKIPTRIE
-		/** compareAndSet nodeA field */
-		boolean casNode(Index<K,V> cmp, Index<K,V> val) {
-			return nodeUpdater.compareAndSet(this, cmp, val);
-		}
 
         /** Updater for casRight */
         static final AtomicReferenceFieldUpdater<Index, Index>
