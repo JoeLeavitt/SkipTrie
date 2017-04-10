@@ -108,25 +108,18 @@ public class SkipTrie {
             return true;
         }
         
-
-        return xFastInsert(key, node);   
-    }
-    
-    private boolean xFastInsert(int key, ConcurrentSkipListMap.Index<Integer, Boolean> node){
-        
         String binaryString = String.format("%32s", Integer.toBinaryString(key)).replace(' ', '0');
- 
-        for(int i = 0; i < binaryString.length(); i++){
+        
+        // 30 is 1 less than the last index of the binaryString
+        for(int i = 31; i > 0; i--){
             
-            
-            String p = binaryString.substring(0, binaryString.length()- 1 - i);
-            int direction = Character.getNumericValue(binaryString.charAt(binaryString.length()- 1 - i));
-            
+            String p = binaryString.substring(0, i);
+            int direction = Character.getNumericValue(binaryString.charAt(i));
             
             while (node.node.value != null){
                TrieNode tn = (TrieNode)  prefixes.lookup(p);
                
-               if(tn == null){
+               if(tn == null){      // Creat an entry for prefix p
                     tn = new TrieNode(p);
                     tn.pointers[direction] = node ;
                     if(prefixes.add(p, tn))
@@ -151,9 +144,10 @@ public class SkipTrie {
             }
         }
         
-        return true;
+        return true; 
     }
     
+   
     
     public boolean delete(int key){
         /*

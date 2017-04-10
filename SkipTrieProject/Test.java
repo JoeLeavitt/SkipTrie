@@ -22,7 +22,7 @@ public class Test {
         ConcurrentSkipListMap<Integer, Boolean> skiplist = new ConcurrentSkipListMap<>();
         SkipTrie skipTrie = new SkipTrie();
         
-        for(int i = 0; i < 10; i++){
+        for(int i = 1; i < 10; i++){
             System.out.println(skipTrie.insert(i));
         }
         
