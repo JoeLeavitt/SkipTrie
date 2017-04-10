@@ -48,7 +48,7 @@
         BucketList<K,V> b = getBucketList(myBucket);
         return b.contains(p);
     }
-    public BucketList.Node lookup(K p){
+    public V lookup(K p){
         int myBucket = Math.abs(BucketList.hashCode(p) % bucketSize.get());
         BucketList<K,V> b = getBucketList(myBucket);
         return b.containsN(p);
