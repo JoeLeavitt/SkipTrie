@@ -96,7 +96,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                Cloneable,
                java.io.Serializable 
 {
-    /**
+    /*
      * This class implements a tree-like two-dimensionally linked skip
      * list in which the index levels are represented in separate
      * nodes from the base nodes holding data.  There are two reasons
@@ -579,6 +579,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         final Index<K,V> down;
         volatile Index<K,V> right;
         volatile Index<K,V> prev;
+        volatile Index<K,V> nodeA;
         int ready = 0;
 
         /**
@@ -590,7 +591,14 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.right = right;
         }
         
-		/// FOR SKIPTRIE
+        Index(Index<K,V> node) {
+            this.nodeA = node;
+            this.node = null;
+            this.down = null;
+            this.right = null;
+        }
+        
+        /// FOR SKIPTRIE
         /** Updater for casPrev */
 		static final AtomicReferenceFieldUpdater<Index, Index>
 		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
@@ -600,6 +608,18 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 		/** compareAndSet value field */
 		boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
 			return prevUpdater.compareAndSet(this, cmp, val);
+		}
+                
+         /// FOR SKIPTRIE
+        /** Updater for casNode */
+		static final AtomicReferenceFieldUpdater<Index, Index>
+		nodeUpdater = AtomicReferenceFieldUpdater.newUpdater
+		(Index.class, Index.class, "nodeA");
+	
+        /// FOR SKIPTRIE
+		/** compareAndSet nodeA field */
+		boolean casNode(Index<K,V> cmp, Index<K,V> val) {
+			return nodeUpdater.compareAndSet(this, cmp, val);
 		}
 
         /** Updater for casRight */
@@ -698,7 +718,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         } 
     } 
         
-        public Index<K,V> skipListPred(Comparable<? super K> key, Index<K,V> start) {
+    public Index<K,V> skipListPred(Comparable<? super K> key, Index<K,V> start) {
         if (key == null)
             throw new NullPointerException(); // don't postpone errors
         for (;;) {
@@ -881,8 +901,11 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     public Index<K,V> topLevelInsert(K key, Index<K,V> pred){
         Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
         
-        if(topIndex != null && topIndex.node.orig_height == TOP)
+        if(topIndex != null && topIndex.node.orig_height == TOP){
+            topIndex.prev = new Index<K,V>(null, null, null);
             fixPrev(pred, topIndex); 
+        
+        }
         
         return topIndex;
     }
@@ -1249,8 +1272,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         // Instead, follow paper's authors and do a fair toss for each level
         int level = 0;
         while (((x >>>= 1) & 1 ) != 0 && level < TOP) ++level;
-        ///return level;
-        return 4;
+        return level;
     }
 
     /**
@@ -1306,7 +1328,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     break;
                 }
             }
-            idxs[k].prev = new Index<K,V>(null, null, null);
+            
             addIndex(idxs[k], oldh, k);
             return (idxs[k]);
         }

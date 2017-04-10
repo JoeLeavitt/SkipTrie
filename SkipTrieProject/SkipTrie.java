@@ -21,6 +21,9 @@ public class SkipTrie {
         skipList = new ConcurrentSkipListMap();
         prefixes = new LockFreeHashSet<Integer,TrieNode>((int)Math.pow(2,20));
         prefixes.add("", new TrieNode(""));
+        TrieNode tn =(TrieNode)prefixes.lookup("");
+        tn.pointers[0] = new ConcurrentSkipListMap.Index<>(null, null, null);
+        tn.pointers[1] = new ConcurrentSkipListMap.Index<>(null, null, null);
     }
     
     
@@ -31,8 +34,8 @@ public class SkipTrie {
         public TrieNode(String key){
             this.key = key;
             this.pointers = new ConcurrentSkipListMap.Index[2];
-            this.pointers[0] = null;
-            this.pointers[1] = null;
+            this.pointers[0] = new ConcurrentSkipListMap.Index<>(null, null, null);
+            this.pointers[1] = new ConcurrentSkipListMap.Index<>(null, null, null);
         }
         
     }
@@ -79,6 +82,7 @@ public class SkipTrie {
            if(query_node != null){
                ConcurrentSkipListMap.Index<Integer, Boolean> candidate = query_node.pointers[direction];
                if(candidate != null){
+                   
                    if(Math.abs(key - getValidValue(candidate)) <= Math.abs(key - getValidValue(ancestor))){
                        ancestor = candidate;
                    }
@@ -88,67 +92,80 @@ public class SkipTrie {
            }
            size = size / 2;
         }
-        if (ancestor != null) System.out.println("FOUND AN ANCESTOR! " + ancestor); /// Testing
+        //System.out.println("FOUND AN ANCESTOR! " + ancestor); /// Testing
         return ancestor;
     }
-    
+
     public boolean insert(int key){
 
         ConcurrentSkipListMap.Index<Integer, Boolean> pred = this.xFastTriePred(key);
         
-        if(pred != null){
-            if (getValidValue(pred) == key){
+       
+        if (getValidValue(pred) == key){
                 return false;
-            }
         }
+        
         ConcurrentSkipListMap.Index<Integer, Boolean> node = skipList.topLevelInsert(key, pred);
         if (node == null)
             return false;
         if (node.node.orig_height != TOP){
+            
             return true;
         }
         
         String binaryString = String.format("%32s", Integer.toBinaryString(key)).replace(' ', '0');
-        
-        // 30 is 1 less than the last index of the binaryString
-        for(int i = 31; i > 0; i--){
+ 
+        for(int i = 0; i < binaryString.length(); i++){
             
-            String p = binaryString.substring(0, i);
-            int direction = Character.getNumericValue(binaryString.charAt(i));
+            String p = binaryString.substring(0, binaryString.length()- 1 - i);
+            int direction = Character.getNumericValue(binaryString.charAt(binaryString.length()- 1 - i));
+//            System.out.println("Run:" + i + "  " + p);
+//            System.out.println("Direction:  " + direction);
             
             while (node.node.value != null){
                TrieNode tn = (TrieNode)  prefixes.lookup(p);
-               
-               if(tn == null){      // Creat an entry for prefix p
+               if(tn == null){
+//                   System.out.println("Adding prefixes to hash");
                     tn = new TrieNode(p);
-                    tn.pointers[direction] = node ;
-                    if(prefixes.add(p, tn))
+                    tn.pointers[direction] = new ConcurrentSkipListMap.Index<>(node); 
+                    if(prefixes.add(p, tn)){
+//                        System.out.println("Adding prefix success");
                         break;
+                    }
                }
-               
-               /// Have we handled case wehere tn != null but tn.pointers[direction] is null?
-               
                else if (tn.pointers[0] == null && tn.pointers[1] == null){
+//                   System.out.println("Deleting node");
                     prefixes.compareAndDelete(p, tn);
                }
                else{
+                   System.out.println("Trying CAS or Key BS");
                    ConcurrentSkipListMap.Index<Integer, Boolean> curr = tn.pointers[direction];
-                   if(curr != null &&(direction == 0 && curr.node.key >= key)||(direction ==1 && curr.node.key<=key))
+                   //tn.pointers[direction] = new ConcurrentSkipListMap.Index<>(node);
+                   if((curr != null)){
+                       if(curr.nodeA != null){
+                            if(((direction == 0 && curr.nodeA.node.key >= key)||(direction == 1 && curr.nodeA.node.key<=key))){
+                                System.out.println("Key BS");
+                                break;
+                            }
+                       }
+                    }
+                       
+                    
+//                   System.out.println("curr  " + curr);
+//                   System.out.println("curr.node "  + curr.nodeA);
+                   //ConcurrentSkipListMap.Index<Integer, Boolean> next = node.right;
+                   if(tn.pointers[direction].casNode(curr.nodeA, node)){
+                       System.out.println("CAS SUCCESS!");
                        break;
-                   
-                   ConcurrentSkipListMap.Index<Integer, Boolean> next = node.right;
-                   if(tn.pointers[direction].casPrev(curr, node))
-                       break;
+                   }
                }
                
             }
         }
+        return true;
         
-        return true; 
     }
-    
-   
-    
+        
     public boolean delete(int key){
         /*
             First delete from skiplist
@@ -159,9 +176,11 @@ public class SkipTrie {
         ConcurrentSkipListMap.Pair<ConcurrentSkipListMap.Index<Integer,Boolean>, 
                 ConcurrentSkipListMap.Index<Integer,Boolean>> pair = skipList.listSearch(key, pred);
         if(pair.right == null){
+            System.out.println("I WANT FALSE");
             return false;
         }
         if(pair.right.node.orig_height != TOP){
+            System.out.println("skip delete");
             return skipList.remove(key, Boolean.TRUE);
         }
         if(!skipList.topLevelDelete(pair.left, pair.right))
@@ -184,15 +203,15 @@ public class SkipTrie {
                 ConcurrentSkipListMap.Pair<ConcurrentSkipListMap.Index<Integer,Boolean>, 
                 ConcurrentSkipListMap.Index<Integer,Boolean>> pair2 = skipList.listSearch(key, pair.left);
                 if(direction == 0){
-                    tn.pointers[direction].casRight(curr, pair2.left);
+                    tn.pointers[direction].casNode(curr.nodeA, pair2.left);
                 }
                 else{
-                    tn.pointers[direction].casRight(curr, pair2.right);
+                    tn.pointers[direction].casNode(curr.nodeA, pair2.right);
                 }
                 curr = tn.pointers[direction];
             }
             if(!((p.length() < binaryString.length()) || p.equals(binaryString))){
-                tn.pointers[direction].casRight(curr, null);
+                tn.pointers[direction].casNode(curr.nodeA, null);
             }
             if (tn.pointers[0] == null && tn.pointers[1] == null){
                     prefixes.compareAndDelete(p, tn);
