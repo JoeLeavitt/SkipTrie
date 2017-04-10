@@ -889,7 +889,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             fixPrev(pred, index);
         }
         result = this.remove(index.node.key);
-        do{													// Will this work after this.remove???
+        do{                 // Will this work after this.remove???
             pair = listSearch(index.node.key, pred);
             fixPrev(pair.left, pair.right);
         }while(pair.right != null);
@@ -897,7 +897,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return (result == null);
     }
     
-    // Will probably need to ensure level is assigned to node
     public Index<K,V> topLevelInsert(K key, Index<K,V> pred){
         Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
         
@@ -910,8 +909,19 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return topIndex;
     }
     
-	
-	
+    public void dllTest() {
+        System.out.println("DLL test:");
+        
+        Index<K,V> dllNode = head;
+        
+        while (true) {
+            dllNode = dllNode.right;
+            if (dllNode == null)
+                return;
+            System.out.println("\t" + dllNode.node.key);
+        }
+    }
+    
 	
 	
     /* ---------------- Comparison utilities -------------- */

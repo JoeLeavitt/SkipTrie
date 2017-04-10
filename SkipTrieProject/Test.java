@@ -23,8 +23,11 @@ public class Test {
         SkipTrie skipTrie = new SkipTrie();
         
         for(int i = 0; i < 200; i++){
-            System.out.println("insert: "+ i +skipTrie.insert(i));
+            System.out.println("insert: "+ i + " " + skipTrie.insert(i));
         }
+        
+        skiplist.dllTest();
+        
         for(int i =0; i < 200; i++){
             System.out.println("delete: "+ i + " " +skipTrie.delete(i));
         }
