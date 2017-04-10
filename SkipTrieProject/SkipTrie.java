@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 public class SkipTrie {
     private final ConcurrentSkipListMap skipList;
     private final LockFreeHashSet prefixes;
-    
+    private final TrieNode root;
     private final int TOP = 4;
     
     
@@ -24,7 +24,7 @@ public class SkipTrie {
         skipList = new ConcurrentSkipListMap();
         prefixes = new LockFreeHashSet<Integer,TrieNode>((int)Math.pow(2,20));
         prefixes.add("", new TrieNode(""));
-        TrieNode tn =(TrieNode)prefixes.lookup("");
+        root = (TrieNode)prefixes.lookup("");
     }
     
     
@@ -62,17 +62,17 @@ public class SkipTrie {
     
     /**
      * @param key
-     * @return the node in the DLL less than key OR NULL if there is no such node yet
+     * @return the node in the DLL <= key OR NULL if there is no such node yet
      */
     public ConcurrentSkipListMap.Index<Integer, Boolean> xFastTriePred(int key){
         
         ConcurrentSkipListMap.Index<Integer, Boolean> curr = lowestAncestor(key);
         
         while (curr != null && curr.node.key > key) {
-            if (curr.marked)        // TODO CHECK WHERE MARKIGN OCCURS AND IMPLEMENT BOTH THESE FIELDS
-                curr = curr.back;
-            else
-                curr = curr.prev;
+//            if (curr.marked)        // TODO CHECK WHERE MARKIGN OCCURS AND IMPLEMENT BOTH THESE FIELDS
+//                curr = curr.back;
+//            else
+//                curr = curr.prev;
         }
         return curr;
     }
@@ -129,12 +129,9 @@ public class SkipTrie {
 
         ConcurrentSkipListMap.Index<Integer, Boolean> pred = this.xFastTriePred(key);
         
-        if (pred != null)
-        {
-            if (getValidValue(pred) == key){
-                return false;
-            }
-        }
+
+        if (pred != null && getValidValue(pred) == key) 
+            return false;
         
         // Note that pred may be null
         ConcurrentSkipListMap.Index<Integer, Boolean> index = skipList.topLevelInsert(key, pred);
@@ -173,7 +170,7 @@ public class SkipTrie {
                          break;
                      }
                 }
-                else if (tn.left == null && tn.right == null){  // p is being deleted
+                else if (tn != this.root && tn.left == null && tn.right == null){  // p is being deleted
                     prefixes.compareAndDelete(p, tn);
                 }
                 else{

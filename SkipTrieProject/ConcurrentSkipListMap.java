@@ -669,6 +669,26 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	
 	
 	
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 		
 	
 	/* -------- SKIPTRIE MODIFICATIONS --------- */
@@ -736,9 +756,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
         }
     }
-	
-
-	
+		
     private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
         for (;;) {
@@ -803,9 +821,18 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 * cause there is a marked node between left and right), then
 	 * listSearch will unlink the node.
 	 */
-	 
+	
+    
+    
 
-    // Harold and Landry's version modified by Jason
+    /**
+     * 
+     * @param kkey key of node being inserted
+     * @param start should be dll node < key or null if none found
+     * @return pair with which to surround the new dll node 
+     *              pair.left MAY BE HEAD
+     *              pair.right MAY BE NULL
+     */
     public Pair<Index<K,V>,Index<K,V>> listSearch (K kkey, Index<K,V> start){
         
         Comparable<? super K> key = comparable(kkey);
@@ -843,23 +870,34 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
     
+    
+    
+    
+    /**
+     * 
+     * @param pred should be dll node < key or null if none found
+     * @param index the dllnode whose prev need's a fixin'
+     */
     public void fixPrev(Index<K,V> pred, Index<K,V> index){
-        Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
         
-        // Note that pair.left may be the head of the DLL    
+        Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
+        // Note that pair.left may be the head of the DLL and pair.right may be null
         
         Index<K,V> index_prev;
         
         while(index.node.value != null){
-            index_prev = index.prev;
-            //Need to handle case where index_prev is null
-            if(index.casPrev(index_prev, pair.left)){  
+            index_prev = index.prev;    
+
+            if(index.casPrev(index_prev, pair.left)){   /// Is there an issue with pair.left potentially being head?
                 index.ready = 1;
                 return;
             }
             pair = listSearch(index.node.key, pred);
         }
     }
+    
+    
+    
     
     public boolean topLevelDelete(Index<K,V> pred, Index<K,V> index){
     
@@ -882,7 +920,6 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
         
         if(topIndex != null && topIndex.node.orig_height == TOP){
-            topIndex.prev = new Index<K,V>(null, null, null);
             fixPrev(pred, topIndex); 
         
         }
@@ -907,6 +944,31 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
     }
     
 	
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 	
     /* ---------------- Comparison utilities -------------- */
 
