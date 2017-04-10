@@ -909,16 +909,19 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return topIndex;
     }
     
-    public void dllTest() {
-        System.out.println("DLL test:");
+    public ArrayList<Index<K,V>> dllTest() {
+        
+        if (head.level != TOP)
+            return null;
         
         Index<K,V> dllNode = head;
+        ArrayList<Index<K,V>> dll = new ArrayList<>();
         
         while (true) {
             dllNode = dllNode.right;
             if (dllNode == null)
-                return;
-            System.out.println("\t" + dllNode.node.key);
+                return dll;
+            dll.add(dllNode);
         }
     }
     

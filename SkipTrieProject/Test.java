@@ -26,7 +26,15 @@ public class Test {
             System.out.println("insert: "+ i + " " + skipTrie.insert(i));
         }
         
-        skiplist.dllTest();
+        /*
+        System.out.println("DLL test:");
+        ArrayList<ConcurrentSkipListMap.Index<Integer,Boolean>> dll = skiplist.dllTest();
+        Iterator it = dll.iterator();
+        while(it.hasNext()){
+            ConcurrentSkipListMap.Index<Integer,Boolean> dllnode = (ConcurrentSkipListMap.Index<Integer,Boolean>) it.next();
+            System.out.println("\t" + dllnode.node.key);
+        }
+        */
         
         for(int i =0; i < 200; i++){
             System.out.println("delete: "+ i + " " +skipTrie.delete(i));

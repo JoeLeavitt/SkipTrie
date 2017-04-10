@@ -111,6 +111,7 @@ public class SkipTrie {
             return true;
         }
         
+        // Indicate that we have a top level node
         System.out.print("TOP ");
         
         String binaryString = String.format("%32s", Integer.toBinaryString(key)).replace(' ', '0');
