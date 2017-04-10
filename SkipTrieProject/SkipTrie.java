@@ -14,7 +14,7 @@ public class SkipTrie {
     private final ConcurrentSkipListMap skipList;
     private final LockFreeHashSet prefixes;
     
-    private final int TOP = 5;
+    private final int TOP = 4;
     
     
     public SkipTrie(){
@@ -91,7 +91,7 @@ public class SkipTrie {
         if (ancestor != null) System.out.println("FOUND AN ANCESTOR! " + ancestor); /// Testing
         return ancestor;
     }
-
+    
     public boolean insert(int key){
 
         ConcurrentSkipListMap.Index<Integer, Boolean> pred = this.xFastTriePred(key);
@@ -107,6 +107,12 @@ public class SkipTrie {
         if (node.node.orig_height != TOP){
             return true;
         }
+        
+
+        return xFastInsert(key, node);   
+    }
+    
+    private boolean xFastInsert(int key, ConcurrentSkipListMap.Index<Integer, Boolean> node){
         
         String binaryString = String.format("%32s", Integer.toBinaryString(key)).replace(' ', '0');
  
@@ -126,6 +132,9 @@ public class SkipTrie {
                     if(prefixes.add(p, tn))
                         break;
                }
+               
+               /// Have we handled case wehere tn != null but tn.pointers[direction] is null?
+               
                else if (tn.pointers[0] == null && tn.pointers[1] == null){
                     prefixes.compareAndDelete(p, tn);
                }
@@ -141,19 +150,23 @@ public class SkipTrie {
                
             }
         }
+        
         return true;
-        
     }
-        
+    
+    
     public boolean delete(int key){
         /*
             First delete from skiplist
             If it was a top level node then
                 delete from x-fast trie as well
          */
-        ConcurrentSkipListMap.Index<Integer,Boolean> pred = predecessor(key-1);
+        ConcurrentSkipListMap.Index<Integer,Boolean> pred = predecessor(key);
         ConcurrentSkipListMap.Pair<ConcurrentSkipListMap.Index<Integer,Boolean>, 
                 ConcurrentSkipListMap.Index<Integer,Boolean>> pair = skipList.listSearch(key, pred);
+        if(pair.right == null){
+            return false;
+        }
         if(pair.right.node.orig_height != TOP){
             return skipList.remove(key, Boolean.TRUE);
         }

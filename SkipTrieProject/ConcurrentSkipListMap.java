@@ -96,7 +96,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                Cloneable,
                java.io.Serializable 
 {
-    /*
+    /**
      * This class implements a tree-like two-dimensionally linked skip
      * list in which the index levels are represented in separate
      * nodes from the base nodes holding data.  There are two reasons
@@ -590,16 +590,17 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.right = right;
         }
         
+		/// FOR SKIPTRIE
         /** Updater for casPrev */
-	static final AtomicReferenceFieldUpdater<Index, Index>
+		static final AtomicReferenceFieldUpdater<Index, Index>
 		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
 		(Index.class, Index.class, "prev");
 	
         /// FOR SKIPTRIE
-	/** compareAndSet value field */
-	boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
-		return prevUpdater.compareAndSet(this, cmp, val);
-	}
+		/** compareAndSet value field */
+		boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
+			return prevUpdater.compareAndSet(this, cmp, val);
+		}
 
         /** Updater for casRight */
         static final AtomicReferenceFieldUpdater<Index, Index>
@@ -851,7 +852,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         while(index.node.value != null){
             index_prev = index.prev;
             //Need to handle case where index_prev is null
-            if(index.prev.casPrev(index_prev, pair.left)){  
+            if(index.casPrev(index_prev, pair.left)){  
                 index.ready = 1;
                 return;
             }
@@ -1248,7 +1249,8 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         // Instead, follow paper's authors and do a fair toss for each level
         int level = 0;
         while (((x >>>= 1) & 1 ) != 0 && level < TOP) ++level;
-        return level;
+        ///return level;
+        return 4;
     }
 
     /**
