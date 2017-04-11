@@ -203,6 +203,11 @@ public class SkipTrie {
             If it was a top level node then
                 delete from x-fast trie as well
          */
+        if (skipList.findNode(key).orig_height != TOP) {
+            System.out.println("skip delete");
+            return skipList.remove(key, Boolean.TRUE);
+        }
+        
         ConcurrentSkipListMap.Index<Integer,Boolean> pred = predecessor(key);
         ConcurrentSkipListMap.Pair<ConcurrentSkipListMap.Index<Integer,Boolean>, 
                 ConcurrentSkipListMap.Index<Integer,Boolean>> pair = skipList.listSearch(key, pred);
@@ -211,10 +216,6 @@ public class SkipTrie {
             return false;
         }
         
-        if(pair.right.node.orig_height != TOP){
-            System.out.println("skip delete");
-            return skipList.remove(key, Boolean.TRUE);
-        }
         
         if(!skipList.topLevelDelete(pair.left, pair.right))
             return false;
