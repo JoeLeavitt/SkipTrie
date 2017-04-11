@@ -131,9 +131,12 @@ public class BucketList<K,V> {
         Window window = find(head, key);
         Node pred = window.pred;
         Node curr = window.curr;
-        if (curr.key == key)
-            return (V)curr.value;
-        return null;
+            if (curr.key == key){
+                return (V)curr.value;
+            }else{
+                return null;
+            }
+                
     }
       
     public BucketList<K,V> getSentinel(int index) {

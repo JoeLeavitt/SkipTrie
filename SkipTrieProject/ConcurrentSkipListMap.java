@@ -96,7 +96,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                Cloneable,
                java.io.Serializable 
 {
-    /**
+    /*
      * This class implements a tree-like two-dimensionally linked skip
      * list in which the index levels are represented in separate
      * nodes from the base nodes holding data.  There are two reasons
@@ -589,18 +589,19 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             this.down = down;
             this.right = right;
         }
-        
-		/// FOR SKIPTRIE
+                
+        /// FOR SKIPTRIE
         /** Updater for casPrev */
-		static final AtomicReferenceFieldUpdater<Index, Index>
-		prevUpdater = AtomicReferenceFieldUpdater.newUpdater
-		(Index.class, Index.class, "prev");
+        static final AtomicReferenceFieldUpdater<Index, Index>
+        prevUpdater = AtomicReferenceFieldUpdater.newUpdater
+        (Index.class, Index.class, "prev");
 	
         /// FOR SKIPTRIE
-		/** compareAndSet value field */
-		boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
+        /** compareAndSet value field */
+        boolean casPrev(Index<K,V> cmp, Index<K,V> val) {
 			return prevUpdater.compareAndSet(this, cmp, val);
 		}
+                
 
         /** Updater for casRight */
         static final AtomicReferenceFieldUpdater<Index, Index>
@@ -668,9 +669,29 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	
 	
 	
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 		
 	
-	/* -------- SKIPTRIE MODIFICATIONS --------- */
+    /* -------- SKIPTRIE MODIFICATIONS --------- */
 	
         /** ADDITIONAL MODIFICIATIONS
          * 
@@ -687,7 +708,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 		 * - added left field to IndexNode
          */
 	
-	public static class Pair<X, Y> {
+    public static class Pair<X, Y> {
         
         public final X left; 
         public final Y right; 
@@ -698,7 +719,9 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         } 
     } 
         
-        public Index<K,V> skipListPred(Comparable<? super K> key, Index<K,V> start) {
+    private boolean reachedTop;
+    
+    public Index<K,V> skipListPred(Comparable<? super K> key, Index<K,V> start) {
         if (key == null)
             throw new NullPointerException(); // don't postpone errors
         for (;;) {
@@ -735,9 +758,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
         }
     }
-	
-
-	
+		
     private Index<K,V> doPutN(K kkey, V value, boolean onlyIfAbsent) {
 	Comparable<? super K> key = comparable(kkey);
         for (;;) {
@@ -802,9 +823,18 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 	 * cause there is a marked node between left and right), then
 	 * listSearch will unlink the node.
 	 */
-	 
+	
+    
+    
 
-    // Harold and Landry's version modified by Jason
+    /**
+     * 
+     * @param kkey key of node being inserted
+     * @param start should be dll node < key or null if none found
+     * @return pair with which to surround the new dll node 
+     *              pair.left MAY BE HEAD
+     *              pair.right MAY BE NULL
+     */
     public Pair<Index<K,V>,Index<K,V>> listSearch (K kkey, Index<K,V> start){
         
         Comparable<? super K> key = comparable(kkey);
@@ -842,23 +872,34 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
     
+    
+    
+    
+    /**
+     * 
+     * @param pred should be dll node < key or null if none found
+     * @param index the dllnode whose prev need's a fixin'
+     */
     public void fixPrev(Index<K,V> pred, Index<K,V> index){
-        Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
         
-        // Note that pair.left may be the head of the DLL    
+        Pair<Index<K,V>,Index<K,V>> pair = listSearch(index.node.key, pred);
+        // Note that pair.left may be the head of the DLL and pair.right may be null
         
         Index<K,V> index_prev;
         
         while(index.node.value != null){
-            index_prev = index.prev;
-            //Need to handle case where index_prev is null
-            if(index.casPrev(index_prev, pair.left)){  
+            index_prev = index.prev;    
+
+            if(index.casPrev(index_prev, pair.left)){   /// Is there an issue with pair.left potentially being head?
                 index.ready = 1;
                 return;
             }
             pair = listSearch(index.node.key, pred);
         }
     }
+    
+    
+    
     
     public boolean topLevelDelete(Index<K,V> pred, Index<K,V> index){
     
@@ -869,7 +910,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             fixPrev(pred, index);
         }
         result = this.remove(index.node.key);
-        do{													// Will this work after this.remove???
+        do{                 // Will this work after this.remove???
             pair = listSearch(index.node.key, pred);
             fixPrev(pair.left, pair.right);
         }while(pair.right != null);
@@ -877,19 +918,60 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         return (result == null);
     }
     
-    // Will probably need to ensure level is assigned to node
     public Index<K,V> topLevelInsert(K key, Index<K,V> pred){
         Index<K,V> topIndex = this.putIfAbsentN(key, (V)Boolean.TRUE);
         
-        if(topIndex != null && topIndex.node.orig_height == TOP)
+        if(topIndex != null && topIndex.node.orig_height == TOP){
+            reachedTop = true;
             fixPrev(pred, topIndex); 
+        
+        }
         
         return topIndex;
     }
     
+    public ArrayList<Index<K,V>> dllTest() {
+        
+        if (head.level != TOP)
+            return null;
+        
+        Index<K,V> dllNode = head;
+        ArrayList<Index<K,V>> dll = new ArrayList<>();
+        
+        while (true) {
+            dllNode = dllNode.right;
+            if (dllNode == null)
+                return dll;
+            dll.add(dllNode);
+        }
+    }
+    
 	
-	
-	
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 	
     /* ---------------- Comparison utilities -------------- */
 
@@ -1249,8 +1331,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         // Instead, follow paper's authors and do a fair toss for each level
         int level = 0;
         while (((x >>>= 1) & 1 ) != 0 && level < TOP) ++level;
-        ///return level;
-        return 4;
+        return level;
     }
 
     /**
@@ -1306,7 +1387,7 @@ public class ConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     break;
                 }
             }
-            idxs[k].prev = new Index<K,V>(null, null, null);
+            
             addIndex(idxs[k], oldh, k);
             return (idxs[k]);
         }
