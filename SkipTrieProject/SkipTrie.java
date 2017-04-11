@@ -18,6 +18,7 @@ public class SkipTrie {
     private final LockFreeHashSet prefixes;
     private final TrieNode root;
     private final int TOP = 4;
+    private boolean reachedTop;
     
     
     public SkipTrie(){
@@ -143,6 +144,7 @@ public class SkipTrie {
         
         // Indicate that we have a top level node
         System.out.print("TOP ");
+        reachedTop = true;
         
         
         return xFastInsert(key, index);
@@ -279,8 +281,6 @@ public class SkipTrie {
     public Integer getValidValue(ConcurrentSkipListMap.Index<Integer,Boolean> index){
         if (index.node == null)
             return Integer.MIN_VALUE;
-        
-        System.out.println("[getValidValue] value found: " + index.node.key);
         return index.node.key;
     }
     
